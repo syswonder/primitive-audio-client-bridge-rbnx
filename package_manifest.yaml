@@ -1,31 +1,21 @@
-# Audio primitive (audio client bridge variant) — drop-in replacement for the
-# default ALSA `audio_driver` package when you want robonix's audio I/O
-# physically on a macOS machine while atlas/pilot/liaison run on Linux.
+# Audio primitive (audio client bridge variant) — routes Robonix audio through
+# a remote robonix-client while Atlas, Pilot, and Liaison run on the robot.
 #
 # The client opens one outbound WebSocket to this package on the Linux host.
 # The robot therefore does not store a client IP address. This package
 # registers the usual `robonix/primitive/audio/{mic,speaker,driver}` contracts
 # with Atlas and relays the connected client's PCM frames.
 #
-# Toggle by commenting one line in `examples/webots/robonix_manifest.yaml`:
-#
-#   primitive:
-#     # - name: audio_driver
-#     #   path: ./primitives/audio_driver
-#     - name: audio_client_bridge
-#       path: ./primitives/audio_client_bridge
-#       config:
-#         transport: reverse
-#         listen_port: 60002
-#
 # Same wire format as audio_driver (16 kHz / mono / s16le PCM in
 # AudioChunk frames) so liaison / scene / TTS see no difference.
 manifestVersion: 1
 
 package:
-  name: com.robonix.example.audio_client_bridge
+  name: robonix.primitive.audio.client_bridge
   version: 0.1.0
-  description: Audio primitive that proxies mic/speaker over WebSocket to an client audio device server.
+  description: Audio primitive that connects Robonix to robonix-client microphone and speaker devices.
+  tags: [primitive, audio, client, websocket, microphone, speaker]
+  maintainers: [wheatfox <wheatfox17@icloud.com>]
   license: MulanPSL-2.0
 
 # Distinct provider_id from `audio_driver` (`.alsa`) so both can co-exist in

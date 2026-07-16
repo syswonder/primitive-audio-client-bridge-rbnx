@@ -1,71 +1,85 @@
-# audio_client_bridge
+# Robonix Client Audio Bridge Primitive
 
-Audio primitive that runs on the Robonix host but routes mic + speaker through
-the selected `robonix-client` device. It implements the same audio contracts
-as `audio_driver`; both providers can be registered at once, and Liaison uses
-the provider selected by the client for F2, voice-steer, and hands-free turns.
+This package exposes a `robonix-client` microphone and speaker through the
+standard Robonix audio contracts. It runs on the robot host and is independent
+of Webots or any specific robot deployment.
 
-Both halves (the Linux primitive package and the macOS server) live
-in this directory and are committed to the repo. The client machine just
-needs `client_audio_server/server.py` + `client_audio_server/requirements.txt` — no
-robonix install, no codegen.
+## How the connection works
 
-## Layout
+The default `reverse` transport makes the robot listen on TCP port `60002`.
+`robonix-client` discovers that endpoint through Atlas and opens the outbound
+WebSocket connection. The robot manifest therefore does not need the Client's
+IP address.
 
-```
-audio_client_bridge/
-├── package_manifest.yaml          # provider_id = com.robonix.primitive.audio
-├── audio_client_bridge/main.py     # Linux side: gRPC servicer ↔ WebSocket client
-├── client_audio_server/server.py           # client side: headless WebSocket server
-├── client_audio_server/server_web.py       # client side: same protocol + browser debug UI
-├── client_audio_server/requirements.txt    # sounddevice + websockets
-└── scripts/{build,start}.sh       # rbnx codegen + entry
-```
-
-## Transport
-
-The default is a reverse WebSocket transport. During driver init the primitive
-binds `0.0.0.0:60002`, publishes its endpoint through Atlas, and waits for
-`robonix-client` to connect. The deployment never stores a client IP.
-
-The client discovers this endpoint through Atlas after the operator selects
-`audio_client_bridge` as an input or output route. Its Audio page owns local
-device selection, audio level display, and the reverse connection lifecycle.
-
-## Setup (one-shot)
-
-### Client side
-
-```sh
-robonix-client --robot-host <robot-host>
+```text
+robonix-client microphone/speaker
+              |
+              | outbound WebSocket
+              v
+audio_client_bridge on the robot
+              |
+              | standard Robonix audio contracts
+              v
+       Liaison and Speech
 ```
 
-Open **Audio**, select input/output primitives and devices, then apply the
-route. The client starts its local audio endpoint and connects to the selected
-reverse bridge when needed. macOS may request microphone and local-network
-permission on first use.
+## Deployment
 
-### Linux side
-
-In `examples/webots/robonix_manifest.yaml`, keep both providers registered:
+Add the package to a robot deployment manifest:
 
 ```yaml
 primitive:
-  - name: audio_driver
-    path: ./primitives/audio_driver
   - name: audio_client_bridge
-    path: ./primitives/audio_client_bridge
+    url: https://github.com/syswonder/primitive-audio-client-bridge-rbnx
+    branch: main
     config:
       transport: reverse
+      listen_host: 0.0.0.0
       listen_port: 60002
 ```
 
-Then `rbnx build && rbnx boot` as usual. The bridge stays active while no
-client is connected; it is selected only when the operator chooses it.
+Then build and boot the deployment:
 
-## Wire format
+```bash
+rbnx build
+rbnx boot
+```
 
-Both directions use 16 kHz, mono, s16le PCM. Frames are 100 ms (3200 B).
+Start the Client on the computer that owns the microphone and speaker:
 
-The current bridge has no authentication or TLS. Use a trusted LAN, Tailscale,
-or an authenticated tunnel; do not expose the bridge port publicly.
+```bash
+robonix-client --robot-host <robot-ip>
+```
+
+Open **Audio**, choose `audio_client_bridge` for the input and output routes,
+select the local devices, and apply the route. The Client connects to the
+reverse endpoint advertised by the primitive.
+
+The full runtime configuration, including the deprecated client-owned server
+transport, is documented in [`config.spec`](config.spec).
+
+## Capabilities
+
+| Contract | Purpose |
+| --- | --- |
+| `robonix/primitive/audio/mic` | Streams Client microphone PCM to Robonix. |
+| `robonix/primitive/audio/speaker` | Plays Robonix PCM on the Client. |
+| `robonix/primitive/audio/list_devices` | Lists Client devices and the current route. |
+| `robonix/primitive/audio/select_device` | Changes the Client input or output device. |
+| `robonix/primitive/audio/bridge_info` | Reports the reverse endpoint and connection state. |
+| `robonix/primitive/audio/driver` | Provides the standard lifecycle interface. |
+
+Audio frames are mono, 16-bit PCM at 16 kHz. The reverse WebSocket currently
+has no TLS or application-level authentication; expose it only on a trusted
+network, Tailscale, or an authenticated tunnel.
+
+## Development checks
+
+```bash
+python3 -m unittest discover -s tests -v
+rbnx build
+```
+
+The `client_audio_server` directory is retained for compatibility with the
+deprecated client-owned server transport. New deployments should use the
+reverse transport managed by `robonix-client`.
