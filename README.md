@@ -45,6 +45,13 @@ rbnx build
 rbnx boot
 ```
 
+The build creates an isolated package environment before code generation,
+installs a pinned protobuf/gRPC compiler and runtime into it, and directs
+`rbnx codegen` to that same interpreter. It then imports every generated
+`*_pb2.py` and `*_pb2_grpc.py` module. Package startup reuses this environment,
+so generated bindings are never validated with a different Python installation
+than the one that runs the bridge.
+
 Start the Client on the computer that owns the microphone and speaker:
 
 ```bash
